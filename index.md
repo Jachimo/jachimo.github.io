@@ -1,4 +1,6 @@
-# Software
+---
+layout: default
+---
 
 I'm not the author of all of these projects; in some cases they are customized versions
 or friendly forks of existing utilities.
@@ -39,5 +41,6 @@ or friendly forks of existing utilities.
   for producing machine-readable versions of email archives for analysis.
 * [iChat to .eml](https://github.com/Jachimo/ichat_to_eml) - Converts saved
   iChat conversations into MIME text files (which typically have the .eml extension)
+
   so they can be imported into mail programs and searched/read/archived like
   email. Neither my fork or the upstream version have been maintained recently.
