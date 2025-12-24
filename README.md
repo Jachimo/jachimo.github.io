@@ -1,10 +1,6 @@
-# @Jachimo's Projects
+# Software
 
-An incomplete list of projects I've worked on.
-
-## Software
-
-I'm not the author of all of these projects; in many cases they are customized versions
+I'm not the author of all of these projects; in some cases they are customized versions
 or friendly forks of existing utilities.
 
 * [Aperture Library Extractor](https://github.com/Jachimo/aplib-extractor) - A hacky fork of
