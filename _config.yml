@@ -1,0 +1,41 @@
+# Jekyll Configuration for jachimo.github.io
+
+# Site settings
+title: "@Jachimo's Projects"
+description: "An incomplete list of projects I've worked on"
+author: Jachimo
+email: ""
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "https://jachimo.github.io" # the base hostname & protocol for your site
+
+# GitHub Pages settings
+github_username: Jachimo
+repository: Jachimo/jachimo.github.io
+
+# Build settings
+markdown: kramdown
+theme: minima
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - .git/
+  - .gitignore
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"
