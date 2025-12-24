@@ -4,7 +4,6 @@
 title: "@Jachimo's Projects"
 description: "An incomplete list of projects I've worked on"
 author: Jachimo
-email: ""
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://jachimo.github.io" # the base hostname & protocol for your site
 
