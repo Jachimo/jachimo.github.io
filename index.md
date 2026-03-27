@@ -21,6 +21,6 @@ layout: default
 
 TBD
 
-## Research
+## [Research](research/)
 
 * [Chat Log Formats](research/chat-log-formats) - Compiled information on various chat log formats used by current and obsolete client programs.
