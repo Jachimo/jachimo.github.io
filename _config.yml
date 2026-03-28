@@ -13,9 +13,10 @@ theme: minima
 github_username: Jachimo
 
 # Explicitly control which pages appear in the header nav.
-# List sub-pages here as you create them (e.g., software.md, hardware.md).
-# An empty list means nothing appears in the nav for the index page.
-header_pages: []
+header_pages:
+  - software/index.md
+  - hardware/index.md
+  - research/index.md
 
 # Exclude from processing
 exclude:

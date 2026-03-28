@@ -17,7 +17,7 @@ layout: default
 * [Mailbox Lightener](https://github.com/Jachimo/mailbox_lightener) - Strip MBOX files down to plain text, discarding HTML and attachments.
 * [iChat to .eml](https://github.com/Jachimo/ichat_to_eml) - Convert iChat conversations to MIME .eml files.
 
-## Hardware
+## [Hardware](hardware/)
 
 TBD
 
