@@ -764,6 +764,7 @@ WHERE maj.message_id IN (
 |------|----------|--------|--------------|----------------|----------------|-------------|----------------|--------|
 | [ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter) | Rust | ~5 017 | Mar 2026 | TXT, HTML | ✅ Full (`crabstep`) | ✅ Copy + convert | ✅ (macOS, Linux, Win) | ✅ Very active |
 | [caleb531/imessage-conversation-analyzer](https://github.com/caleb531/imessage-conversation-analyzer) | Python | ~33 | Jan 2026 | CSV, XLSX, JSON, Markdown, table | ✅ (`pytypedstream`) | ✅ Metadata only | ❌ macOS only | ✅ Active |
+| [kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml) | Python | N/A | 2021 | EML, HTML | ✅ (`python-typedstream`, `ccl-bplist`) | ✅ Embedded attachments (NSFileWrapper) | ✅ Cross-platform (Python) | ❌ Low activity |
 | [my-other-github-account/imessage_tools](https://github.com/my-other-github-account/imessage_tools) | Python | ~124 | Mar 2026 | dict/print | ⚠️ Heuristic | ❌ | ❌ macOS only | ✅ |
 | [niftycode/imessage_reader](https://github.com/niftycode/imessage_reader) | Python | ~116 | Mar 2026 | Terminal, Excel, SQLite | ❌ | ❌ | ⚠️ Linux possible | ✅ |
 | [LangChain IMessageChatLoader](https://docs.langchain.com/oss/python/integrations/chat_loaders/imessage) | Python | N/A | 2025 | ChatSession objects | ⚠️ Known issues[^31] | ❌ | ❌ macOS only | ✅ |
@@ -856,6 +857,27 @@ imessage-exporter --format html --db-path ~/Library/Messages/chat.db \
 7. `from_sql` — arbitrary SQL against an in-memory DuckDB populated with the conversation dataframes
 
 **Output formats:** `csv`, `excel`/`xlsx`, `markdown`/`md`, `json`, default table
+
+### 16.3 Kadin2048 / ichat_to_eml (upstream)
+
+**Repository:** [https://github.com/kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml)  
+**Language:** Python  
+**License:** GPL-3.0  
+**Last active:** 2021
+
+**Purpose:** Convert Apple iChat / Messages archive files (.chat typedstream, .ichat binary plist) into RFC-compliant EML files (with optional HTML part and embedded attachments). The upstream project provides a pure-Python parser for NeXT "typedstream" files and binary PList (.ichat) files, and includes logic to extract NSAttachment/NSFileWrapper serialized attachments.
+
+**Evidence (selected code):**
+- Imports the typedstream parser and bplist decoder: `ichat_to_eml.py:28-31`[^k1]
+- Detects `.chat` vs `.ichat` and uses `typedstream.unarchive_from_file` and `bplist_decode.bplist_to_conv`: `ichat_to_eml.py:69-82`[^k2]
+- Handles NSAttachment / NSFileWrapper serialized attachments and decodes via `rtfd_decode.decode_rtfd`: `ichat_to_eml.py:173-186`[^k3]
+- README credits `python-typedstream` and `ccl-bplist`: `README.md`[^k4]
+
+**Implications:**
+- Highly relevant to `chat.db` research for decoding older iChat `.chat` typedstream logs and newer `.ichat` binary plists. Use the upstream repo for attribution in any published research.
+- Note license: GPL-3.0 — reuse or redistribution must comply with GPL terms.
+
+
 
 **Data schema exposed to analyzers:**
 
@@ -1029,6 +1051,16 @@ No XML standard (e.g., like Android's SMS Backup & Restore XML format) exists fo
 - `payload_data` / `attributedBody` internal structure is the least-documented aspect
 
 ---
+
+## 20. Footnotes & Citations
+
+[^k1]: `ichat_to_eml.py:28-31` (imports `typedstream`, `rtfd_decode`, `bplist_decode`) — upstream: [kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml/blob/main/ichat_to_eml.py)
+
+[^k2]: `ichat_to_eml.py:69-82` (detects `.chat` vs `.ichat` and calls `typedstream.unarchive_from_file` and `bplist_decode.bplist_to_conv`) — upstream: [kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml/blob/main/ichat_to_eml.py)
+
+[^k3]: `ichat_to_eml.py:173-186` (extracts NSAttachment/NSFileWrapper serialized attachments and calls `rtfd_decode.decode_rtfd`) — upstream: [kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml/blob/main/ichat_to_eml.py)
+
+[^k4]: README acknowledgement of `python-typedstream` and `ccl-bplist` — `README.md` (upstream) — https://github.com/kadin2048/ichat_to_eml/blob/main/README.md
 
 ## 20. Footnotes & Citations
 
