@@ -47,7 +47,4 @@ or friendly forks of existing utilities.
   saved .mbox (Unix mailbox) file and strips it down to a single `text/plain` part
   per message, discarding HTML formatting, attachments, and extraneous headers; good
   for producing machine-readable versions of email archives for analysis.
-* [iChat to .eml](https://github.com/Jachimo/ichat_to_eml) - Converts saved
-  iChat conversations into MIME text files (which typically have the .eml extension)
-  so they can be imported into mail programs and searched/read/archived like
-  email. Neither my fork or the upstream version have been maintained recently.
+* [iChat to .eml](https://github.com/Jachimo/ichat_to_eml) - Converts saved iChat conversations into MIME `.eml` files (EML/HTML output). Upstream: [kadin2048/ichat_to_eml](https://github.com/kadin2048/ichat_to_eml) — original project providing pure‑Python typedstream and binary‑plist parsers and NSAttachment/NSFileWrapper handling (GPL-3.0). My fork contains minor tweaks and is not the upstream source.
