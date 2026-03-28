@@ -5,12 +5,15 @@ title: "@Jachimo's Projects"
 
 ## [Software](software/)
 
-Short summaries and documentation for software projects: project descriptions, links to source code, README-based installation notes, and usage pointers. See the Software page for full project descriptions and links.
+- [experiments](https://github.com/Jachimo/experiments) — Various small code experiments and utilities; actively developed.
+- [chatlogtoeml](https://github.com/Jachimo/chatlogtoeml) — Conversion utility to migrate chat logs to RFC822 .eml files for archiving.
+- [mbox-to-couchdb](https://github.com/Jachimo/mbox-to-couchdb) — Tool to migrate Unix mbox email archives into CouchDB.
 
 ## [Hardware](hardware/)
 
-Notes, designs, and writeups about hardware projects, schematics, and build logs. See the Hardware page for detailed notes, BOMs (bills of materials), and photos.
+TBD
 
 ## [Research](research/)
 
-Reports, references, and technical writeups on data formats, reverse engineering, and archival workflows. See the Research page for full reports and reference documents, including the Chat Log Formats guide and the iMessage chat.db schema reference.
+- [iMessage chat.db reference](/research/imessage-chatdb-reference) — Comprehensive analysis of Apple iMessage/sms database schemas, attachments, and export tools.
+- [Chat Log Formats](/research/chat-log-formats) — Compiled information on various chat log formats used by current and obsolete client programs.
