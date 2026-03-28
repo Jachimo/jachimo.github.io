@@ -1,7 +1,16 @@
-# iMessage / SMS Database Schema, Attachment Storage, and Archival Tools
-## A Comprehensive Technical Reference
+# Apple iMessage Databases on macOS & iOS
 
-*Research compiled: 2026 | Covers macOS Tahoe 26.x / iOS 26.x and earlier*
+Version 1.0, compiled 2026-03-27  
+Covers macOS Tahoe / iOS 26.x and earlier  
+
+**Reverse Engineering Note:** Apple does not publish official
+documentation for the `chat.db`/`sms.db` schema; virtually all
+information in this report was drawn from public reverse engineering
+documentation and open source tool implementations.
+
+**Note:** This report was compiled in part by automation based on
+curated sample data, including GitHub repository files, secondary web
+sources, and both synthetic and real-world sample data.
 
 ---
 
@@ -22,7 +31,7 @@
 13. [iCloud Sync Effects](#13-icloud-sync-effects)
 14. [Reconstructing a Full Conversation (SQL)](#14-reconstructing-a-full-conversation-sql)
 15. [Tool Comparison Table](#15-tool-comparison-table)
-16. [Tool Deep-Dives](#16-tool-deep-dives)
+16. [Tool Details](#16-tool-details)
 17. [Recommended Archival Approach](#17-recommended-archival-approach)
 18. [Key Repositories Summary](#18-key-repositories-summary)
 19. [Confidence Assessment](#19-confidence-assessment)
@@ -32,7 +41,32 @@
 
 ## 1. Executive Summary
 
-Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Sequoia/iOS 18+) RCS messages in a SQLite 3 database called `chat.db` on macOS (`~/Library/Messages/chat.db`) and `sms.db` on iOS (`/private/var/mobile/Library/SMS/sms.db`). Both databases share a nearly identical schema consisting of approximately seven primary tables linked by join tables, with the `message` table alone carrying 94+ columns as of macOS Tahoe 26. The primary encoding challenge is the `attributedBody` BLOB column — a serialized `NSMutableAttributedString` in Apple's proprietary `typedstream`/`NSKeyedArchiver` format — which since macOS Ventura (13) has replaced the plain-text `text` column for many message types. A vibrant ecosystem of open-source tools exists for extraction, with [ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter) (Rust, 5 000+ stars) being the most comprehensive and actively maintained, offering TXT and HTML export with full attachment embedding and media conversion. [caleb531/imessage-conversation-analyzer](https://github.com/caleb531/imessage-conversation-analyzer) (Python) provides a high-level analytics and transcript API built on pandas/duckdb. Archival best practice is HTML with embedded or co-located attachments for human readability, plus a parallel JSON/SQLite dump for machine readability.
+Apple's Messages application stores all iMessage, SMS, MMS, and (as of
+macOS Sequoia/iOS 18+) RCS messages in a SQLite 3 database called
+`chat.db` on macOS (`~/Library/Messages/chat.db`) and `sms.db` on iOS
+(`/private/var/mobile/Library/SMS/sms.db`). Both databases share a
+nearly identical schema consisting of approximately seven primary
+tables linked by join tables, with the `message` table alone carrying
+94+ columns as of macOS Tahoe 26. 
+
+The primary encoding challenge is the `attributedBody` BLOB column — a
+serialized `NSMutableAttributedString` in Apple's proprietary
+`typedstream`/`NSKeyedArchiver` format — which since macOS Ventura
+(13) has replaced the plain-text `text` column for many message
+types. 
+
+An ecosystem of open-source tools exists for extraction, with
+[ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter)
+(Rust, 5000+ stars) being the most comprehensive and actively
+maintained, offering TXT and HTML export with full attachment
+embedding and media
+conversion. 
+
+[caleb531/imessage-conversation-analyzer](https://github.com/caleb531/imessage-conversation-analyzer)
+(Python) provides a high-level analytics and transcript API built on
+pandas/duckdb. Archival best practice is HTML with embedded or
+co-located attachments for human readability, plus a parallel
+JSON/SQLite dump for machine readability.
 
 ---
 
@@ -43,40 +77,42 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 | Platform | Database Path |
 |---|---|
 | macOS | `~/Library/Messages/chat.db` |
-| iOS (device, jailbroken) | `/private/var/mobile/Library/SMS/sms.db` |
-| iOS (iTunes/Finder backup) | `~/Library/Application Support/MobileSync/Backup/<UUID>/3d0d7e5fb2ce288813306e4d4636395e047a3d28` |
 | macOS Attachments dir | `~/Library/Messages/Attachments/` |
+| iOS (device, jailbroken) | `/private/var/mobile/Library/SMS/sms.db` |
+| iOS (iTunes/Finder backup) | `Library/Application Support/MobileSync/Backup/<UUID>/3d0d7e5fb2ce288813306e4d4636395e047a3d28` |
 
-> **Access Note:** macOS 10.14+ requires *Full Disk Access* for the process reading `chat.db`. Grant access in **System Settings → Privacy & Security → Full Disk Access**.[^1]
+**Note:** macOS 10.14+ requires *Full Disk Access* for reading
+`chat.db`. Grant access in **System Settings → Privacy & Security →
+Full Disk Access**.[^1]
 
 ### Entity-Relationship ASCII Diagram
 
 ```
  ┌──────────────┐        ┌───────────────────────┐        ┌──────────────┐
- │    handle    │        │   chat_handle_join     │        │     chat     │
+ │    handle    │        │   chat_handle_join    │        │     chat     │
  │──────────────│        │───────────────────────│        │──────────────│
  │ ROWID (PK)   │◄───────│ handle_id (FK)        │        │ ROWID (PK)   │
  │ id           │        │ chat_id (FK)          │───────►│ guid         │
  │ country      │        └───────────────────────┘        │ style        │
- │ service      │                                          │ chat_ident.  │
- │ uncanonicali.│                                          │ display_name │
- │ person_centr.│                                          │ room_name    │
- └──────┬───────┘                                          │ service_name │
-        │                                                  └──────┬───────┘
-        │ handle_id                                               │ chat_id
-        ▼                                                         ▼
+ │ service      │                                         │ chat_ident.  │
+ │ uncanonicali.│                                         │ display_name │
+ │ person_centr.│                                         │ room_name    │
+ └──────┬───────┘                                         │ service_name │
+        │                                                 └──────┬───────┘
+        │ handle_id                                              │ chat_id
+        ▼                                                        ▼
  ┌──────────────────────────────────────────────────────────────────────────┐
- │                           message                                         │
+ │                           message                                        │
  │──────────────────────────────────────────────────────────────────────────│
- │ ROWID (PK)  guid  text  attributedBody  handle_id  date  date_read        │
- │ date_delivered  is_from_me  service  is_read  is_delivered  is_sent       │
- │ associated_message_guid  associated_message_type  (tapbacks/reactions)    │
- │ reply_to_guid  thread_originator_guid  (threading)                        │
- │ payload_data  balloon_bundle_id  (rich media / app integrations)          │
- │ group_title  cache_roomnames  item_type  (group chat metadata)             │
- │ date_edited  date_retracted  (edit/unsend, macOS Ventura+)                │
- │ expressive_send_style_id  (bubble/screen effects)                         │
- │ ... (94 total columns as of macOS Tahoe 26)                               │
+ │ ROWID (PK)  guid  text  attributedBody  handle_id  date  date_read       │
+ │ date_delivered  is_from_me  service  is_read  is_delivered  is_sent      │
+ │ associated_message_guid  associated_message_type  (tapbacks/reactions)   │
+ │ reply_to_guid  thread_originator_guid  (threading)                       │
+ │ payload_data  balloon_bundle_id  (rich media / app integrations)         │
+ │ group_title  cache_roomnames  item_type  (group chat metadata)           │
+ │ date_edited  date_retracted  (edit/unsend, macOS Ventura+)               │
+ │ expressive_send_style_id  (bubble/screen effects)                        │
+ │ ... (94 total columns as of macOS Tahoe 26)                              │
  └──────────────────────────────┬───────────────────────────────────────────┘
                                 │
         ┌───────────────────────┴───────────────────────┐
@@ -113,11 +149,15 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 ## 3. Table: `message`
 
 **Location:** `chat.db` and `sms.db`  
-**Description:** The central table. Each row is one discrete message unit, including reactions/tapbacks (which are themselves stored as message rows with `associated_message_guid` set).[^2]
+**Description:** The central table. Each row is one discrete message
+unit, including reactions/tapbacks (which are themselves stored as
+message rows with `associated_message_guid` set).[^2]
 
-> As of macOS Tahoe 26 / iOS 26, the `message` table has **94 columns**. The full schema below is sourced from reverse-engineering documentation in [ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter).[^3]
+As of macOS Tahoe 26 / iOS 26, the `message` table has **94
+columns**. The full schema below is sourced from documentation in
+[ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter).[^3]
 
-### Full Column Listing
+### Column Listing
 
 | cid | Column Name | Type | Notes |
 |-----|-------------|------|-------|
@@ -225,7 +265,8 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 
 ## 4. Table: `chat`
 
-**Description:** One row per conversation thread. Covers both 1:1 chats and group chats. The `style` field distinguishes them.[^4]
+**Description:** One row per conversation thread. Covers both 1:1
+chats and group chats. The `style` field distinguishes them.[^4]
 
 | cid | Column Name | Type | Notes |
 |-----|-------------|------|-------|
@@ -272,7 +313,9 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 
 ## 5. Table: `handle`
 
-**Description:** Represents a unique contact identifier (phone number or email). Multiple handles can map to the same real person (e.g., phone + email for the same Apple ID).[^6]
+**Description:** Represents a unique contact identifier (phone number
+or email). Multiple handles can map to the same real person (e.g.,
+phone + email for the same Apple ID).[^6]
 
 | cid | Column Name | Type | Notes |
 |-----|-------------|------|-------|
@@ -283,13 +326,18 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 | 4 | `uncanonicalized_id` | TEXT | Original unformatted identifier |
 | 5 | `person_centric_id` | TEXT | Cross-device person identifier for deduplication |
 
-**Notes on deduplication:** The same physical person may have 2–4 handle rows (SMS phone, iMessage phone, iMessage email). Tools like imessage-exporter handle this via `person_centric_id` or by matching on `chat_handle_join`.[^7]
+**Notes on deduplication:** The same physical person may have 2–4
+handle rows (SMS phone, iMessage phone, iMessage email). Tools like
+imessage-exporter handle this via `person_centric_id` or by matching
+on `chat_handle_join`.[^7]
 
 ---
 
 ## 6. Table: `attachment`
 
-**Description:** Metadata for every file attachment. Does not contain the file itself — only a path and metadata. The file lives on disk at the `filename` path.[^8]
+**Description:** Metadata for every file attachment. Does not contain
+the file itself — only a path and metadata. The file lives on disk at
+the `filename` path.[^8]
 
 | cid | Column Name | Type | Notes |
 |-----|-------------|------|-------|
@@ -322,7 +370,8 @@ Apple's Messages application stores all iMessage, SMS, MMS, and (as of macOS Seq
 
 ## 7. Table: `chat_message_join`
 
-**Description:** Many-to-many join between `chat` and `message`. Allows a message to belong to a chat.[^9]
+**Description:** Many-to-many join between `chat` and
+`message`. Allows a message to belong to a chat.[^9]
 
 ```sql
 CREATE TABLE chat_message_join (
@@ -332,13 +381,15 @@ CREATE TABLE chat_message_join (
 );
 ```
 
-> **Index:** Both `chat_id` and `message_id` are individually indexed for lookup performance.
+**Index:** Both `chat_id` and `message_id` are individually indexed for lookup performance.
 
 ---
 
 ## 8. Table: `chat_handle_join`
 
-**Description:** Many-to-many join between `chat` and `handle`. Defines group membership. For 1:1 chats, there is exactly one `handle_id` row.[^10]
+**Description:** Many-to-many join between `chat` and
+`handle`. Defines group membership. For 1:1 chats, there is exactly
+one `handle_id` row.[^10]
 
 ```sql
 CREATE TABLE chat_handle_join (
@@ -362,7 +413,7 @@ CREATE TABLE message_attachment_join (
 );
 ```
 
-> **Note:** A single message can have multiple attachments (e.g., a photo burst or a message with an image + a document). The `cache_has_attachments` flag on `message` is a performance hint but should not be relied on exclusively.
+**Note:** A single message can have multiple attachments (e.g., a photo burst or a message with an image + a document). The `cache_has_attachments` flag on `message` is a performance hint but should not be relied on exclusively.
 
 ---
 
@@ -390,11 +441,15 @@ CREATE TABLE message_attachment_join (
         └── ...
 ```
 
-Attachments are stored in a **two-level hex-prefix directory** scheme (first two hex digits of a hash form the first directory, second two form the second), then a GUID-named subdirectory containing the actual file.[^12]
+Attachments are stored in a **two-level hex-prefix directory** scheme
+(first two hex digits of a hash form the first directory, second two
+form the second), then a GUID-named subdirectory containing the actual
+file.[^12]
 
 ### `attachment.filename` Format
 
-The `filename` column stores a **tilde-expanded absolute path** on macOS:
+The `filename` column stores a tilde-expanded absolute path on macOS:
+
 ```
 ~/Library/Messages/Attachments/0A/10/B5C6D2E4-FFFF-AAAA-BBBB-123456789ABC/IMG_0042.HEIC
 ```
@@ -410,15 +465,24 @@ When accessed programmatically, expand `~` with `os.path.expanduser()` in Python
 
 ### iOS Backup Attachments
 
-In an iTunes/Finder backup, attachment files are also hash-renamed (SHA-1 of domain + relative path), located in:
+In an iTunes/Finder backup, attachment files are also hash-renamed
+(SHA-1 of domain + relative path), located in:
+
 ```
 ~/Library/Application Support/MobileSync/Backup/<UUID>/
 ```
-The `Manifest.db` SQLite file in the backup root maps the hash filenames to their original paths.[^14]
+
+The `Manifest.db` SQLite file in the backup root maps the hash
+filenames to their original paths.[^14]
 
 ### iCloud Optimization
 
-When **iCloud Messages** is enabled with "Optimize Storage", attachments may be **evicted from local disk** and replaced with a stub. The `attachment.transfer_state` will reflect this (state `8` = not locally available). The file referenced by `filename` will not exist on disk until re-downloaded. The `total_bytes` field still records the original size.[^15]
+When **iCloud Messages** is enabled with "Optimize Storage",
+attachments may be **evicted from local disk** and replaced with a
+stub. The `attachment.transfer_state` will reflect this (state `8`
+means not locally available). The file referenced by `filename` will
+not exist on disk until re-downloaded. The `total_bytes` field still
+records the original size.[^15]
 
 ---
 
@@ -426,7 +490,10 @@ When **iCloud Messages** is enabled with "Optimize Storage", attachments may be 
 
 ### 11.1 The `date` Column — Apple Epoch (Nanoseconds)
 
-All timestamp columns (`date`, `date_read`, `date_delivered`, `date_edited`, `date_retracted`, etc.) use the **Core Data timestamp format**: integer nanoseconds since **2001-01-01 00:00:00 UTC** (the "Cocoa epoch" or "Apple epoch").
+All timestamp columns (`date`, `date_read`, `date_delivered`,
+`date_edited`, `date_retracted`, etc.) use the **Core Data timestamp
+format**: integer nanoseconds since **2001-01-01 00:00:00 UTC** (the
+"Cocoa epoch" or "Apple epoch").
 
 **Conversion to Unix timestamp:**
 
@@ -442,19 +509,30 @@ unix_timestamp = (apple_ns_timestamp / 1_000_000_000) + APPLE_EPOCH_OFFSET
 datetime(date / 1000000000 + strftime('%s', '2001-01-01'), 'unixepoch') AS readable_date
 ```
 
-This exact expression is used in the SQL queries of [caleb531/imessage-conversation-analyzer](https://github.com/caleb531/imessage-conversation-analyzer/blob/main/ica/queries/messages.sql#L6).[^16]
+This exact expression is taken from the SQL queries of
+[caleb531/imessage-conversation-analyzer](https://github.com/caleb531/imessage-conversation-analyzer/blob/main/ica/queries/messages.sql#L6).[^16]
 
-**Historical note:** Prior to macOS Sierra (10.12) / iOS 11, the `date` column stored **seconds** (not nanoseconds) since the same epoch. Databases with values < ~1.5×10¹² are in seconds; values ≥ ~1.5×10¹² are in nanoseconds. This epoch is distinct from the Unix epoch (1970-01-01) by exactly 978,307,200 seconds.[^17]
+**Historical note:** Prior to macOS Sierra (10.12) / iOS 11, the
+`date` column stored **seconds** (not nanoseconds) since the same
+epoch. Databases with values < ~1.5×10¹² are in seconds; values ≥
+~1.5×10¹² are in nanoseconds. This epoch is distinct from the Unix
+epoch (1970-01-01) by exactly 978,307,200 seconds.[^17]
 
 ### 11.2 The `attributedBody` BLOB — `typedstream` / `NSKeyedArchiver`
 
-**What it is:** A serialized `NSMutableAttributedString` — a string with attached ranges of formatting, link metadata, mentions, OTP codes, and more.
+**What it is:** A serialized `NSMutableAttributedString` — a string
+with attached ranges of formatting, link metadata, mentions, OTP
+codes, and more.
 
-**Why it matters:** Starting with approximately macOS Ventura (13.x), Apple began storing message text **only** in `attributedBody` (with `text` being NULL) for some message types, particularly messages received via iMessage with formatting, stickers, or after the schema migration.[^18]
+**Why it matters:** Starting with approximately macOS Ventura (13.x),
+Apple began storing message text **only** in `attributedBody` (with
+`text` being NULL) for some message types, particularly messages
+received via iMessage with formatting, stickers, or after the schema
+migration.[^18]
 
 **Format:**
-- Pre-Ventura: Uses the legacy **`typedstream`** binary format (GNUstep-era Objective-C serialization)
-- Ventura+: May use **`NSKeyedArchiver`** binary plist, which wraps an NSAttributedString
+- Pre-Ventura: Uses the legacy `typedstream` binary format (GNUstep-era Objective-C serialization)
+- Ventura+: May use `NSKeyedArchiver` binary plist, which wraps an NSAttributedString
 
 **Decoding approaches:**
 
@@ -467,6 +545,7 @@ This exact expression is used in the SQL queries of [caleb531/imessage-conversat
 | Apple ObjC/Swift native | ObjC/Swift | Perfect | Requires macOS, cannot run cross-platform |
 
 **Heuristic Python decode** (from `my-other-github-account/imessage_tools`):
+
 ```python
 attributed_body = attributed_body.decode('utf-8', errors='replace')
 if "NSNumber" in attributed_body:
@@ -477,9 +556,11 @@ if "NSNumber" in attributed_body:
             attributed_body = str(attributed_body).split("NSDictionary")[0]
             attributed_body = attributed_body[6:-12]  # strip framing bytes
 ```
+
 This is fragile but works for plain-text extraction in many cases.[^22]
 
 **Inner structure of a decoded `attributedBody`:**
+
 ```
 NSMutableAttributedString {
     string: "Hello @Alice, check this out!",
@@ -492,7 +573,10 @@ NSMutableAttributedString {
 
 ### 11.3 Reactions / Tapbacks
 
-Tapbacks are stored as **separate `message` rows** with `associated_message_guid` pointing to the original message's `guid`. They are identified by `associated_message_type` being in the range 2000–2005 (received) or -2000 to -2005 (removed).[^23]
+Tapbacks are stored as **separate `message` rows** with
+`associated_message_guid` pointing to the original message's
+`guid`. They are identified by `associated_message_type` being in the
+range 2000–2005 (received) or -2000 to -2005 (removed).[^23]
 
 **`associated_message_type` values:**
 
@@ -505,9 +589,12 @@ Tapbacks are stored as **separate `message` rows** with `associated_message_guid
 | 2004 | ‼️ Emphasized | -2004 |
 | 2005 | ❓ Questioned | -2005 |
 
-**iOS 18 / macOS Sequoia+:** Emoji reactions (any emoji) are stored in `associated_message_emoji` (column 85) with `associated_message_type` = 2006 for the custom emoji reaction.[^24]
+**iOS 18 / macOS Sequoia+:** Emoji reactions (any emoji) are stored in
+`associated_message_emoji` (column 85) with `associated_message_type`
+= 2006 for the custom emoji reaction.[^24]
 
 **SQL to find all tapbacks:**
+
 ```sql
 SELECT
     m.guid,
@@ -523,18 +610,23 @@ WHERE m.associated_message_type BETWEEN 2000 AND 2006;
 
 ### 11.4 `payload_data` — NSKeyedArchiver Rich Content
 
-The `payload_data` BLOB is an `NSKeyedArchiver`-encoded binary plist. It stores structured data for:
+The `payload_data` BLOB is an `NSKeyedArchiver`-encoded binary
+plist. It stores structured data for:
+
 - **URL Previews**: cached title, description, image, canonical URL
 - **Apple Pay**: transaction amount, currency, direction
 - **App Integrations** (`balloon_bundle_id`): Apple Fitness, SharePlay, Check In, Find My, Polls
 - **Apple Music**: album art, preview stream URL, lyrics
 - **Apple Maps**: `Placemark` data
 
-Decoding requires either native ObjC/Swift or `crabstep` (Rust). The imessage-exporter project is the only cross-platform open-source tool known to fully decode this.[^25]
+Decoding requires either native ObjC/Swift or `crabstep` (Rust). The
+imessage-exporter project is the only cross-platform open-source tool
+currently known to fully decode this.[^25]
 
 ### 11.5 Threaded Replies
 
 Threaded replies (iMessage reply feature, introduced macOS Monterey):
+
 - `reply_to_guid`: direct parent message GUID
 - `thread_originator_guid`: the root of the thread chain
 - `thread_originator_part`: part index for multi-part root messages
@@ -555,7 +647,10 @@ The schemas are **nearly identical**. Key differences:
 | `is_from_me` | Consistent | Consistent |
 | iCloud sync | Bidirectionally synced | Source device |
 
-**imessage-exporter explicitly notes:** "Jailbroken iOS filesystem data uses `sms.db`, which follows the same schema as macOS `chat.db`. Resolved as a macOS database with an alternate attachment root."[^26]
+**imessage-exporter explicitly notes:** "Jailbroken iOS filesystem
+data uses `sms.db`, which follows the same schema as macOS
+`chat.db`. Resolved as a macOS database with an alternate attachment
+root."[^26]
 
 **Tables present in both databases:**
 - `message`, `chat`, `handle`, `attachment`
@@ -563,26 +658,42 @@ The schemas are **nearly identical**. Key differences:
 - `deleted_messages`, `kvtable`, `_SqliteDatabaseProperties`
 - `sync_deleted_messages`, `sync_deleted_chats`, `sync_deleted_attachments`
 
-**iOS backup `sms.db` hash:** In an iTunes/Finder backup, `sms.db` is stored under the SHA-1 hash filename `3d0d7e5fb2ce288813306e4d4636395e047a3d28`.[^27]
+**iOS backup `sms.db` hash:** In an iTunes/Finder backup, `sms.db` is
+stored under the SHA-1 hash filename
+`3d0d7e5fb2ce288813306e4d4636395e047a3d28`.[^27]
 
 ---
 
 ## 13. iCloud Sync Effects
 
-When **Messages in iCloud** is enabled (Settings → [your Apple ID] → iCloud → Messages):
+When **Messages in iCloud** is enabled (Settings → [your Apple ID] →
+iCloud → Messages):
 
-1. **All devices share one canonical message history.** Deletions on one device propagate to all.
-2. **The macOS `chat.db` becomes authoritative** — it can contain messages from all your Apple devices.
-3. **Storage optimization:** Attachments may be locally evicted (`transfer_state = 8`). The database row remains but `filename` points to a non-existent local file.
-4. **`ck_sync_state` and `ck_record_id`** columns track CloudKit synchronization status.
-5. **Forensic implication:** After deletion with iCloud sync on, the message is removed from all devices and backups made after the fact. Pre-deletion backups are the only recovery path.[^28]
-6. **WAL file:** The `chat.db-wal` (write-ahead log) may contain uncommitted or recently committed data not yet checkpointed into the main database file. This is relevant for forensic acquisition — always capture `chat.db`, `chat.db-shm`, and `chat.db-wal` together.[^29]
+1. **All devices share one canonical message history.** Deletions on
+   one device propagate to all.
+2. **The macOS `chat.db` becomes authoritative** — it can contain
+   messages from all your Apple devices.
+3. **Storage optimization:** Attachments may be locally evicted
+   (`transfer_state = 8`). The database row remains but `filename`
+   points to a non-existent local file.
+4. **`ck_sync_state` and `ck_record_id`** columns track CloudKit
+   synchronization status.
+5. **Forensic implication:** After deletion with iCloud sync on, the
+   message is removed from all devices and backups made after the
+   fact. Pre-deletion backups are the only recovery path.[^28]
+6. **WAL file:** The `chat.db-wal` (write-ahead log) may contain
+   uncommitted or recently committed data not yet checkpointed into
+   the main database file. This is relevant for forensic acquisition —
+   always capture `chat.db`, `chat.db-shm`, and `chat.db-wal`
+   together.[^29]
 
 ---
 
 ## 14. Reconstructing a Full Conversation (SQL)
 
-The following query reconstructs a complete conversation thread with sender information, timestamps, and identifies reactions. This is the pattern used by tools like caleb531/imessage-conversation-analyzer.[^30]
+The following query reconstructs a complete conversation thread with
+sender information, timestamps, and identifies reactions. This is the
+pattern used by tools like `caleb531/imessage-conversation-analyzer`.[^30]
 
 ```sql
 -- Get all messages in a conversation, with sender identity and human-readable timestamps
@@ -617,7 +728,7 @@ WHERE m.ROWID IN (
 ORDER BY m.date ASC;
 ```
 
-**To also get attachments for each message:**
+To also get attachments for each message:
 
 ```sql
 -- Attachments query (from caleb531/imessage-conversation-analyzer/ica/queries/attachments.sql)
@@ -659,7 +770,7 @@ WHERE maj.message_id IN (
 
 ---
 
-## 16. Tool Deep-Dives
+## 16. Tool Details
 
 ### 16.1 ReagentX/imessage-exporter
 
@@ -678,7 +789,13 @@ WHERE maj.message_id IN (
 - Encrypted iOS backups (via `crabapple`)
 - Jailbroken iOS `sms.db`
 
-**Supported features as of macOS Tahoe 26.4:** iMessage, RCS, SMS, MMS, multi-part messages, replies/threads, formatted text (mentions, hyperlinks, OTP/2FA, unit conversions), expressives (bubble+screen), tapbacks, stickers, Apple Pay, URL previews, App Integrations (Fitness, SharePlay, Check In, Find My, Polls), handwritten messages (SVG), Digital Touch, edited/unsent messages, satellite messages, genmoji.[^32]
+**Supported features as of macOS Tahoe 26.4:** iMessage, RCS, SMS,
+MMS, multi-part messages, replies/threads, formatted text (mentions,
+hyperlinks, OTP/2FA, unit conversions), expressives (bubble+screen),
+tapbacks, stickers, Apple Pay, URL previews, App Integrations
+(Fitness, SharePlay, Check In, Find My, Polls), handwritten messages
+(SVG), Digital Touch, edited/unsent messages, satellite messages,
+genmoji.[^32]
 
 **Attachment conversion options:**
 - HEIC → JPEG
@@ -987,7 +1104,3 @@ No XML standard (e.g., like Android's SMS Backup & Restore XML format) exists fo
 [^38]: imessage-exporter HTML export — [ReagentX/imessage-exporter README.md](https://github.com/ReagentX/imessage-exporter/blob/main/README.md) (fetched directly)
 
 [^39]: LangChain IMessageChatLoader — [docs.langchain.com/oss/python/integrations/chat_loaders/imessage](https://docs.langchain.com/oss/python/integrations/chat_loaders/imessage)
-
----
-
-*Report compiled by research automation from primary sources (GitHub repository files fetched directly via API) and secondary web sources. All GitHub file contents were verified by direct API fetch at research time. Apple does not publish official documentation for the `chat.db` schema; all column semantics reflect community reverse engineering.*
