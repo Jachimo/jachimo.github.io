@@ -1,4 +1,7 @@
-# Apple iMessage Databases on macOS & iOS
+---
+layout: default
+title: Apple iMessage Databases on macOS and iOS
+---
 
 Version 1.0, compiled 2026-03-27  
 Covers macOS Tahoe / iOS 26.x and earlier  
