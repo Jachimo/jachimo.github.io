@@ -1,5 +1,6 @@
 ---
 layout: default
+title: "@Jachimo's Projects"
 ---
 
 ## [Software](software/)
