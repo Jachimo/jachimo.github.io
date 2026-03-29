@@ -8,6 +8,7 @@ title: "@Jachimo's Projects"
 - [experiments](https://github.com/Jachimo/experiments) — Various small code experiments and utilities; actively developed.
 - [chatlogtoeml](https://github.com/Jachimo/chatlogtoeml) — Conversion utility to migrate chat logs to RFC822 .eml files for archiving.
 - [mbox-to-couchdb](https://github.com/Jachimo/mbox-to-couchdb) — Tool to migrate Unix mbox email archives into CouchDB.
+- [mm2gpsd](https://github.com/Jachimo/mm2gpsd) — Exposes GPS data from ModemManager-supported LTE modules to gpsd via a pseudo-serial interface.
 
 ## [Hardware](hardware/)
 
