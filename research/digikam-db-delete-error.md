@@ -1,12 +1,17 @@
-# DigiKam: Tag deletion fails with ERRNO 1451
+---
+layout: default
+title: DigiKam Tag Deletion: ERRNO 1451
+---
+
+In which I spend a bunch of time and a bunch of my employer's Claude
+credits chasing down an annoyance in DigiKam's tag list.
 
 ## Environment
 
 - OS: "Pop_OS 22.04" (Ubuntu 22.04), AMD64 architecture
 - DigiKam: v9.1.0 AppImage
 - DB Schema: migration V16 -> V17 performed 2026-07-26 with DigiKam 9.1.0
-- Database server: MariaDB 10.6.23-MariaDB-0ubuntu0.22.04.1 (InnoDB),
-  remote host
+- Database server: MariaDB 10.6.23, remote host
 - Database name: `digikam` (all four DigiKam databases on the same server)
 - Collection storage: NFS 4.0 share from a NAS
 
@@ -29,20 +34,14 @@ Bound values:  QList(QVariant(int, 433))
 Digikam::BdEngineBackend::execDBAction: Error while executing DBAction [ "DeleteTag" ] Statement [ "DELETE FROM Tags WHERE id=:tagID;" ]
 ```
 
-But do _all_ tag deletions fail?  No.  Just some of them.
+## Diagnosis
 
-To test which, I deleted a bunch of tags while capturing logs,
-restarted the application a few times, deleted some more, etc., then
-fed the resulting 5+ MB of logs into an LLM and told it to look for
-similiarities among the tags that caused errors and subsequently
-reappeared.
-
-It appeared that _only_ tags whose rows referenced
-`ImageTagProperties` would fail to delete. (Tags referencing only
-`ImageTags` and `TagProperties` are deleted fine.)
-
-All three foreign keys referencing `*Tags` are declared with cascading
-deletes:
+After looking at the logs, it became clear that _only_ tags whose rows
+referenced `ImageTagProperties` would fail to delete. (Some tags
+referenced only `ImageTags` and `TagProperties` and deleted fine.  I'm
+still unsure why some tags use one vs. the other.)  And all three
+foreign keys referencing `*Tags` are declared with cascading updates
+and deletes:
 
 ```sql
 -- information_schema.KEY_COLUMN_USAGE + REFERENTIAL_CONSTRAINTS
@@ -50,16 +49,6 @@ ImageTagProperties.tagid  ImageTagProperties_Tags  Tags(id)  ON DELETE CASCADE O
 TagProperties.tagid       TagProperties_Tags       Tags(id)  ON DELETE CASCADE ON UPDATE CASCADE
 ImageTags.tagid           ImageTags_Tags           Tags(id)  ON DELETE CASCADE ON UPDATE CASCADE
 ```
-
-## Diagnosis
-
-Although it presents as a missing/incorrect FK, the source of the
-problem seems to be the DB schema (specifically a change introduced in
-v9.1.0).
-
-With `ImageTagProperties_Tags` correctly defined with `ON DELETE
-CASCADE`, a `DELETE FROM Tags WHERE id=?` shouldn't ever fail with a
-parent-row error (1451).  
 
 The relevant `SHOW ENGINE INNODB STATUS` output:
 
@@ -70,8 +59,8 @@ mysql tables in use 6, locked 6
 ...
 DELETE FROM Tags WHERE id IN (429,430,431,432,433,617)
 Foreign key constraint fails for table `digikam`.`Tags`:
-,
-  CONSTRAINT `ImageTagProperties_Tags` FOREIGN KEY (`tagid`) REFERENCES `Tags` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+
+CONSTRAINT `ImageTagProperties_Tags` FOREIGN KEY (`tagid`) REFERENCES `Tags` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ...
 But the referencing table `digikam`.`ImageTagProperties`
 or its .ibd file or the required index does not currently exist!
@@ -93,6 +82,10 @@ issue would have come from.  While I have done some shifty,
 warranty-voiding stuff to my DigiKam installation in the past, I
 hadn't done anything to _that_ part of the database.
 
+Although it presents as a missing/incorrect FK, the source of the
+problem _seems_ to be related to a DB schema change introduced in
+v9.1.0.
+
 ### V16/V17 Schema Update
 
 Next, I checked the MariaDB logs on my "enterprise" (aka: always-on PC
@@ -105,12 +98,13 @@ the log showed an `ALTER TABLE` warning restricted to
 Jul 26 12:56:16 myserver mariadbd[1976]: 2026-07-26 12:56:16 6898 [Warning] InnoDB: In ALTER TABLE `digikam`.`ImageTagProperties` has or is referenced in foreign key constraints which are not compatible with the new table definition.
 ```
 
-The date, 2026-07-26, matched my recollection of installing the last
-DigiKam update. (DigiKam 9.1.0 was released 2026-06-07, so this at
-least doesn't involve any temporal or causality violations.) 
+How interesting! The date, 2026-07-26, roughly matched my recollection
+of installing the last DigiKam update. (DigiKam 9.1.0 was released
+2026-06-07, so this at least doesn't involve any temporal-causality
+violations.)
 
-The [release notes for 9.1.0][ra] do mention database work and a V16
-to V17 schema update:
+And the [release notes for 9.1.0][ra] do mention database work and a
+V16 to V17 schema update:
 
 > "This release focuses on database migration ..." "The database
 > schema has been updated to support time zones ... Significant
@@ -118,37 +112,23 @@ to V17 schema update:
 
 [ra]: https://www.digikam.org/news/2026-06-07-9.1.0_release_announcement/
 
-This led to [KDE commit `3b256067`][kdecom], which includes "database
-update to add Indexes and timezone field to V17". FIXED-IN 9.1.0,
-includes `ALTER TABLE ImageTagProperties MODIFY COLUMN property
-VARCHAR(255)…`
+This led me to [KDE commit `3b256067`][kdecom], which includes a
+"database update to add Indexes and timezone field to V17". And a
+quick search for table alterations led to the file
+`dbconfig.xml.cmake.in` and  the line: `ALTER TABLE
+ImageTagProperties MODIFY COLUMN property VARCHAR(255)…`
   
 [kdecom]: https://invent.kde.org/graphics/digikam/-/commit/3b256067d8938838522c16ab7df05fe5c03f21c2
 
-The V17 migration in `dbconfig.xml.cmake.in` runs::
-
-```sql
-DROP INDEX IF EXISTS imagetagproperties_index;
-DROP INDEX IF EXISTS imagetagproperties_tagid_index;
-DROP INDEX IF EXISTS imagetagproperties_imageid_index;
-ALTER TABLE ImageInformation ADD timeZone INTEGER;
-CREATE INDEX image_status_index ON Images (status);
-CREATE INDEX imgtagprop_img_tag_idx ON ImageTagProperties (imageid, tagid);
-CREATE INDEX imgtagprop_prop_tag_img_idx ON ImageTagProperties (property, tagid, imageid);
-```
-
-(Earlier, commit `603698d3` seems to have renamed the
-`ImageTagProperties` indexes from `imgtagprop_idx` to
-`imgtagprop_img_tag_idx`.)
-
-This is followed (in the upgrade section):
-
-```sql
-ALTER TABLE ImageTagProperties MODIFY COLUMN property VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci;
-```
+This would explain the warning in the logs from Jul 26 at 12:56:16.
+The migration script changed `ImageTagProperties.property` to a
+VARCHAR (from something else), MariaDB warned that this would break
+some foreign key constraints but did it anyway, and now we're getting
+FK errors.
 
 ### Related Issues
-Not a complete list, but these popped on a search:
+Not a complete list, but these popped on a quick "am I reinventing the
+wheel?" search:
 
 - [519390 DB: ImageTagProperties.property should be VARCHAR, not
   TEXT](https://bugs.kde.org/show_bug.cgi?id=519390) — schema change,
@@ -162,6 +142,7 @@ Not a complete list, but these popped on a search:
   MySQL/MariaDB; upstream closed as user-environment.
 
 ## Proposed Solution
+All of this is very nice, but what to do about it?
 
 1. **Backup first.**
 
@@ -182,8 +163,8 @@ Not a complete list, but these popped on a search:
      ON DELETE CASCADE ON UPDATE CASCADE;
    ```
 
-   Inspect `information_schema.REFERENTIAL_CONSTRAINTS` to confirm
-   `DELETE_RULE=CASCADE`, `UPDATE_RULE=CASCADE`.
+   Bonus point: Inspect `information_schema.REFERENTIAL_CONSTRAINTS`
+   to confirm `DELETE_RULE=CASCADE`, `UPDATE_RULE=CASCADE`.
 
 3. **Delete the affected tags.** Just blow them away:
 
@@ -192,30 +173,31 @@ Not a complete list, but these popped on a search:
    ```
    
    These values came from the original error messages, plus inspection
-   of the DB to find a few others that I hadn't stumbled on. (Your
-   values will, of course, be different.)
+   of the DB to find a few others that I hadn't stumbled on.  Your
+   values will, of course, be different.
 
 4. **Verify:** the offending tags are gone, and their `ImageTags` rows
-   (in this case, 144 rows) were removed automatically by the cascade.
+   (in my case, 144 rows) were removed automatically by the cascade.
 
 ## Recommendations
+If you encounter magically un-deletable tags and think this might be
+the issue:
 
-- Check the server error log for the `InnoDB: In ALTER TABLE
-  ... ImageTagProperties has or is referenced in foreign key
-  constraints which are not compatible with the new table definition.`
+- Check the server error log for the `InnoDB: In ALTER
+  TABLE... ImageTagProperties has or is referenced in foreign key
+  constraints which are not compatible with the new table definition`
   warning; if present, the FK metadata should probably be rebuilt as
   above.
-- Verify `SHOW ENGINE INNODB STATUS` concurrently with a failing
-  DELETE: the "referencing table ... does not currently exist"
-  phrasing is the InnoDB signature of this broken state.
+- Verify `SHOW ENGINE INNODB STATUS` during a failing DELETE. Look for
+  messages with "referencing table… does not currently exist" phrasing.
 - If `ImageTagProperties_Tags` is intact, then the `1451` error is a
   real orphan-row problem (though one that shouldn't happen with
   cascading FKs) and probably requires drilling into the
   `ImageTagProperties`/`TagProperties`/`ImageTags` rows, looking for `tagid`
   not present in `Tags`.
 - Don't confuse this with a separate (but symptomatically similar)
-  issue where DigiKam successfully deletes a tag from the DB, but then
-  reinserts it later during a metadata synchronization.  (I've run
+  issue where DigiKam _successfully_ deletes a tag from the DB, but then
+  _reinserts_ it later during a metadata synchronization.  (I've run
   into that one too, and will write a note about it at a later date.)
   Ruling that out requires looking at the logs while attempting the
   delete.
