@@ -5,6 +5,8 @@ date: 2026-03-27
 title: Chat Log Formats
 ---
 
+# A Review of IM Chat Log Formats
+
 ## Introduction
 
 This page summarizes the information I've found while researching file

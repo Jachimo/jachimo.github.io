@@ -3,8 +3,9 @@ layout: default
 date: 2026-08-10
 title: DigiKam Tag Deletion ERRNO 1451
 ---
+# DigiKam Tag Deletion: ERRORNO 1451
 
-In which I spend a bunch of time and a bunch of my employer's Claude
+Or, in which I spend a bunch of time and a bunch of my employer's Claude
 credits chasing down an annoyance in DigiKam's tag list.
 
 ## Environment
@@ -20,7 +21,6 @@ credits chasing down an annoyance in DigiKam's tag list.
 
 Attempting to delete certain tags inside DigiKam fails: the tag
 appears to be deleted, but reappears on the next launch of DigiKam.
-
 In the database, the DELETE operation fails and the row is shown again
 on the next restart, because it was never deleted in the first place.
 
@@ -40,9 +40,10 @@ Digikam::BdEngineBackend::execDBAction: Error while executing DBAction [ "Delete
 After looking at the logs, it became clear that _only_ tags whose rows
 referenced `ImageTagProperties` would fail to delete. (Some tags
 referenced only `ImageTags` and `TagProperties` and deleted fine.  I'm
-still unsure why some tags use one vs. the other.)  And all three
-foreign keys referencing `*Tags` are declared with cascading updates
-and deletes:
+still unsure why some tags use one vs. the other.)  
+
+All three foreign keys referencing `*Tags` are declared with cascading
+updates and deletes:
 
 ```sql
 -- information_schema.KEY_COLUMN_USAGE + REFERENTIAL_CONSTRAINTS
