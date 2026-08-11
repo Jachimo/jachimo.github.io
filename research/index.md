@@ -1,13 +1,20 @@
 ---
 layout: default
-title: Research
+title: Research and Notes
+date: 2026-08-10
 ---
 
-## Research
+# Research and Tech Notes
 
-Compiled notes, reports, and documentation on various topics I've explored.
+Notes, reports, articles, and documentation on various topics.
 
-### Instant Messaging / Chat Logs
+## Digital Photography
+
+* [DigiKam Troubleshooting](digikam) — Sub-page for notes related to
+  the open-source DigiKam DAM, which I use to manage my 60,000+ image
+  personal library.
+
+## Instant Messaging / Chat Logs
 
 * [Chat Log Formats](chat-log-formats) - Compiled information on
   various chat log formats used by (some) current and (mostly)

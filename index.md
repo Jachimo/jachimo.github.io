@@ -1,10 +1,11 @@
 ---
 layout: default
 title: "@Jachimo's Projects"
+date: 2026-08-10
 ---
 
 ## [Software](software/)
-**Full list on the [software page](software/).** Recent highlights include:
+Full list on the [software page](software/). Recent highlights:
 
 - [mm2gpsd](https://github.com/Jachimo/mm2gpsd) — Exposes GPS data
   from ModemManager-supported LTE modules to `gpsd` via a pseudo-serial
@@ -18,7 +19,7 @@ title: "@Jachimo's Projects"
 - [experiments](https://github.com/Jachimo/experiments) — Various
   small code experiments and utilities; irregularly updated.
 
-## [Research](research/)
+## [Research and Notes](research/)
 Research summaries, data dumps, etc.
 
 - [DigiKam Issues and Solutions](/research/digikam) — Troubleshooting

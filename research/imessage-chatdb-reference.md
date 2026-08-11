@@ -1,5 +1,7 @@
 ---
 layout: default
+rfcdate: Sat Mar 28 13:49:42 2026 -0400
+date: 2026-03-28
 title: Apple iMessage Databases on macOS and iOS
 ---
 

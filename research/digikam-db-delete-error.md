@@ -1,6 +1,7 @@
 ---
 layout: default
-title: DigiKam Tag Deletion: ERRNO 1451
+date: 2026-08-10
+title: DigiKam Tag Deletion ERRNO 1451
 ---
 
 In which I spend a bunch of time and a bunch of my employer's Claude

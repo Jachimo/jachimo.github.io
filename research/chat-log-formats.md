@@ -1,5 +1,7 @@
 ---
 layout: default
+rfcdate: Fri Mar 27 16:21:06 2026 -0400
+date: 2026-03-27
 title: Chat Log Formats
 ---
 

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: DigiKam Tech Notes
+date: 2026-08-10
 ---
 # DigiKam Troubleshooting Notes
 
